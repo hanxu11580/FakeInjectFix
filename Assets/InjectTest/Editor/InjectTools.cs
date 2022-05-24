@@ -17,6 +17,9 @@ using UnityEngine;
 
 public static class InjectTools
 {
+    const string PatchKey = "Key_Sum";
+    const string GenPatchMethodName = "Gen_Sum";
+
     [MenuItem("Tools/RequestScriptReload")]
     public static void RequestScriptReload()
     {
@@ -59,23 +62,36 @@ public static class InjectTools
 
                 foreach (MethodDefinition method in typeDefinition.Methods)
                 {
-                    if (method.CustomAttributes.Any(attr =>
-                            attr.AttributeType.FullName.Equals(testPatchFullName, StringComparison.Ordinal)))
-                    {
+                    //if (method.CustomAttributes.Any(attr =>
+                    //        attr.AttributeType.FullName.Equals(testPatchFullName, StringComparison.Ordinal)))
+                    //{
+                    //    if (method.IsConstructor || method.IsGetter || method.IsSetter || !method.IsPublic)
+                    //        continue;
+
+                    //    // test
+                    //    if (method.Name == "Log")
+                    //    {
+                    //        // 这个注入方式失败了
+                    //        //InjectLog_1(mainModule, method);
+
+                    //        InjectLog_2(mainModule, method);
+                    //        PrintMethodIns(method);
+                    //        break;
+                    //    }
+                    //}
+
+                    if (method.CustomAttributes.Any(attr =>attr.AttributeType.FullName.Equals(patchFullName, StringComparison.Ordinal))) {
                         if (method.IsConstructor || method.IsGetter || method.IsSetter || !method.IsPublic)
                             continue;
 
                         // test
-                        if (method.Name == "Log")
-                        {
-                            // 这个注入方式失败了
-                            //InjectLog_1(mainModule, method);
-
-                            InjectLog_2(mainModule, method);
+                        if (method.Name == "Sum") {
+                            InjectMethod(mainModule, method);
                             PrintMethodIns(method);
                             break;
                         }
                     }
+
                 }
             }
             assemblyDefinition.Write(AssemblyPath, new WriterParameters {WriteSymbols = false});
@@ -269,26 +285,79 @@ public static class InjectTools
 
     static void InjectMethod(ModuleDefinition module, MethodDefinition method)
     {
+        //TODO 使用InsertBefore插入
+
+        // 生成方法
+        var genMethod = GenPatchMethod(module, method);
+
+
+        // 插桩
         var ilp = method.Body.GetILProcessor();
         var startNopIns = method.Body.Instructions[0];
         var brFalseJumpIns = startNopIns.Next; // 条件不满足时跳转的指令
 
-        var ins_ldstr = ilp.Create(OpCodes.Ldstr, method.FullName);
+        var ins_ldstr = ilp.Create(OpCodes.Ldstr, PatchKey); // 插入patchKey
         ilp.InsertBefore(startNopIns, ins_ldstr); //插到index = 0位置
 
         var incrIndex = 0;
-        var hasPatchMethod = module.ImportReference(typeof(PatchLoad).GetMethod("HasPatch"));
-        var ins_call = ilp.Create(OpCodes.Call, hasPatchMethod);
+        var method_HasPatch = module.Types.Single(t => t.Name == "PatchLoad").Methods.Single(m => m.Name == "HasPatch");
+        var ins_call = ilp.Create(OpCodes.Call, method_HasPatch);
         IncrAddIns(ilp, ins_call, ref incrIndex);
         var ins_brfalse = ilp.Create(OpCodes.Brfalse, brFalseJumpIns);
         IncrAddIns(ilp, ins_brfalse, ref incrIndex);
 
         // 用于测试直接返回0
-        var ins_ldc_i4_0 = ilp.Create(OpCodes.Ldc_I4_0);
-        IncrAddIns(ilp, ins_ldc_i4_0, ref incrIndex);
+        //var ins_ldc_i4_0 = ilp.Create(OpCodes.Ldc_I4_0);
+        //IncrAddIns(ilp, ins_ldc_i4_0, ref incrIndex);
+
+        // 拥有Patch时返回执生成方法，并返回
+        if(method.Parameters.Count > 0) {
+            //如果有参数 把参数从局部放入栈中
+            //for (int i = 0; i < method.Parameters.Count; i++) {
+            //    IncrAddIns(ilp, Instruction.Create(OpCodes.Ldarg_S, (byte)i), ref incrIndex);
+            //}
+
+            // 知道Sum有2个参数 直接方进入就行了
+            IncrAddIns(ilp, Instruction.Create(OpCodes.Ldarg_0), ref incrIndex);
+            IncrAddIns(ilp, Instruction.Create(OpCodes.Ldarg_1), ref incrIndex);
+
+        }
+        IncrAddIns(ilp, Instruction.Create(OpCodes.Call, genMethod), ref incrIndex);
 
         var ins_ret = ilp.Create(OpCodes.Ret);
         IncrAddIns(ilp, ins_ret, ref incrIndex);
+    }
+
+    /// <summary>
+    /// 生成补丁方法
+    /// </summary>
+    /// <returns></returns>
+    static MethodDefinition GenPatchMethod(ModuleDefinition module, MethodDefinition method) {
+        var patchLoadType = module.Types.Single(t => t.Name == "PatchLoad");
+
+        // 基础方法
+        // 返回值
+        // 参数
+
+        var returnType = method.ReturnType;
+        MethodDefinition patchMethod = new MethodDefinition(GenPatchMethodName, Mono.Cecil.MethodAttributes.Public, returnType);
+
+        foreach (var parameter in method.Parameters) {
+            patchMethod.Parameters.Add(new ParameterDefinition(parameter.ParameterType));
+        }
+
+        var ilp  = patchMethod.Body.GetILProcessor();
+
+        ilp.Append(Instruction.Create(OpCodes.Nop));
+        ilp.Append(Instruction.Create(OpCodes.Ldstr, "我是生成的方法"));
+        var log_method = module.ImportReference(typeof(Debug).GetMethod("Log", new Type[] { typeof(object) }));
+        ilp.Append(Instruction.Create(OpCodes.Call, log_method));
+
+        ilp.Append(Instruction.Create(OpCodes.Ret));
+
+        patchLoadType.Methods.Add(patchMethod);
+
+        return patchMethod;
     }
 
     #endregion

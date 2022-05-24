@@ -8,7 +8,7 @@ public class TTT : MonoBehaviour
     void Start()
     {
         A a = new A();
-        a.Log();
+        Debug.LogError(a.Sum(1, 2));
 
         //Debug.LogError("!!!");
     }
