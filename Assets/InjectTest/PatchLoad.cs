@@ -30,4 +30,9 @@ public static class PatchLoad
         _patchDic.TryGetValue(patchKey, out object patch);
         return patch;
     }
+
+    public  static int TestStatic(int a, int b) {
+        Debug.LogError("PatchLoad Excute Static Method");
+        return a + b;
+    }
 }

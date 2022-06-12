@@ -49,7 +49,6 @@ public class A
         return a - b;
     }
 
-
     [TestPatch]
     public void Log()
     {

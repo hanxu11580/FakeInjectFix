@@ -318,10 +318,11 @@ public static class InjectTools
             //}
 
             // 知道Sum有2个参数 直接方进入就行了
-            IncrAddIns(ilp, Instruction.Create(OpCodes.Ldarg_0), ref incrIndex);
             IncrAddIns(ilp, Instruction.Create(OpCodes.Ldarg_1), ref incrIndex);
+            IncrAddIns(ilp, Instruction.Create(OpCodes.Ldarg_2), ref incrIndex);
 
         }
+
         IncrAddIns(ilp, Instruction.Create(OpCodes.Call, genMethod), ref incrIndex);
 
         var ins_ret = ilp.Create(OpCodes.Ret);
@@ -340,8 +341,10 @@ public static class InjectTools
         // 参数
 
         var returnType = method.ReturnType;
-        MethodDefinition patchMethod = new MethodDefinition(GenPatchMethodName, Mono.Cecil.MethodAttributes.Public, returnType);
+        Mono.Cecil.MethodAttributes methodAttributes = Mono.Cecil.MethodAttributes.Public | Mono.Cecil.MethodAttributes.Static;
+        MethodDefinition patchMethod = new MethodDefinition(GenPatchMethodName, methodAttributes, returnType);
 
+        // 添加参数
         foreach (var parameter in method.Parameters) {
             patchMethod.Parameters.Add(new ParameterDefinition(parameter.ParameterType));
         }
@@ -353,7 +356,9 @@ public static class InjectTools
         var log_method = module.ImportReference(typeof(Debug).GetMethod("Log", new Type[] { typeof(object) }));
         ilp.Append(Instruction.Create(OpCodes.Call, log_method));
 
-        ilp.Append(Instruction.Create(OpCodes.Ret));
+        // 测试用  直接返回0
+        //ilp.Append(Instruction.Create(OpCodes.Ldc_I4_0));
+        //ilp.Append(Instruction.Create(OpCodes.Ret));
 
         patchLoadType.Methods.Add(patchMethod);
 

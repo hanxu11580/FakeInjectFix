@@ -10,7 +10,6 @@ public class TTT : MonoBehaviour
         A a = new A();
         Debug.LogError(a.Sum(1, 2));
 
-        //Debug.LogError("!!!");
     }
 
     // Update is called once per frame
