@@ -50,6 +50,22 @@ unsafe class ThreadStackInfo {
 unsafe public class VirtualMachine {
     // 栈的大小
     public const int MAX_EVALUATION_STACK_SIZE = 1024 * 10;
+    VMInstruction** unmanagedCodes;
+    Action onDispose;
 
+    public VirtualMachine(VMInstruction** unmanaged_codes, Action on_dispose) {
+        unmanagedCodes = unmanaged_codes;
+        onDispose = on_dispose;
+    }
 
+    ~VirtualMachine() {
+        onDispose();
+        unmanagedCodes = null;
+    }
+
+    //public Value* Execute(Instruction* pc, Value* argumentBase, object[] managedStack,
+    //        Value* evaluationStackBase, int argsCount, int methodIndex,
+    //        int refCount = 0, Value** topWriteBack = null) {
+
+    //}
 }

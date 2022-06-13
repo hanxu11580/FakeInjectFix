@@ -99,6 +99,7 @@ public static class InjectTools
     }
 
 
+
     static void Test(ModuleDefinition module, MethodDefinition method)
     {
         var insertPoint = method.Body.Instructions[0];
@@ -363,6 +364,28 @@ public static class InjectTools
         patchLoadType.Methods.Add(patchMethod);
 
         return patchMethod;
+    }
+
+    #endregion
+
+    #region Fix
+    //参数类型信息
+    class ParameterMatchInfo {
+        public bool IsOut;
+        public string ParameterType;
+    }
+
+    //方法签名信息
+    class MethodMatchInfo {
+        public string Name;
+        public string ReturnType;
+        public ParameterMatchInfo[] Parameters;
+    }
+
+
+    [MenuItem("Tools/IFix")]
+    public static void IFix() {
+
     }
 
     #endregion
