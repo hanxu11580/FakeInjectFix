@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
 
 public class TTT : MonoBehaviour
@@ -9,11 +10,11 @@ public class TTT : MonoBehaviour
     void Start()
     {
         A a = new A();
-        Debug.LogError(a.Sum(1, 2));
+        UnityEngine.Debug.LogError(a.Sum(1, 2));
 
     }
 
-    unsafe static public VirtualMachine CreateVirtualMachine(int loopCount) {
+    unsafe static public VirtualMachine CreateVirtualMachine() {
         VMInstruction[][] methods = new VMInstruction[][]
         {
                 new VMInstruction[] //int add(int a, int b)
@@ -24,42 +25,23 @@ public class TTT : MonoBehaviour
                     new VMInstruction {Code = Code.Add },
                     new VMInstruction {Code = Code.Ret , Operand = 1},
                 },
-                new VMInstruction[] // void test()
-                {
-                    new VMInstruction {Code = Code.StackSpace, Operand = (1 << 16) | 2}, // local | maxstack
-                    //TODO: local init
-                    new VMInstruction {Code = Code.Ldc_I4, Operand = 0 }, //1
-                    new VMInstruction {Code = Code.Stloc, Operand = 0},   //2
-                    new VMInstruction {Code = Code.Br, Operand =  9}, // 3
-
-                    new VMInstruction {Code = Code.Ldc_I4, Operand = 1 }, //4
-                    new VMInstruction {Code = Code.Ldc_I4, Operand = 2 }, //5
-                    new VMInstruction {Code = Code.Call, Operand = (2 << 16) | 0}, //6
-                    new VMInstruction {Code = Code.Pop }, //7
-
-                    new VMInstruction {Code = Code.Ldloc, Operand = 0 }, //8
-                    new VMInstruction {Code = Code.Ldc_I4, Operand = 1 }, //9
-                    new VMInstruction {Code = Code.Add }, //10
-                    new VMInstruction {Code = Code.Stloc, Operand = 0 }, //11
-
-                    new VMInstruction {Code = Code.Ldloc, Operand = 0 }, // 12
-                    new VMInstruction {Code = Code.Ldc_I4, Operand =  loopCount}, // 13
-                    new VMInstruction {Code = Code.Blt, Operand = -10 }, //14
-
-                    new VMInstruction {Code = Code.Ret, Operand = 0 }
-                }
         };
 
         List<IntPtr> nativePointers = new List<IntPtr>();
 
+        // unmanagedCodes[i][j] 第几个方法的第几个指令
         IntPtr nativePointer = System.Runtime.InteropServices.Marshal.AllocHGlobal(
             sizeof(VMInstruction*) * methods.Length);
+        // sizeof(VMInstruction)=8 指令大小也是8个字节
+        // sizeof(VMInstruction*)=8 指令大小就是8个字节
         VMInstruction** unmanagedCodes = (VMInstruction**)nativePointer.ToPointer();
         nativePointers.Add(nativePointer);
 
         for (int i = 0; i < methods.Length; i++) {
+            // 这个方法里，有几条指令，就分配多少个VMInstruction大小的内存
             nativePointer = System.Runtime.InteropServices.Marshal.AllocHGlobal(
                 sizeof(VMInstruction) * methods[i].Length);
+            // ToPointer返回指向VMInstruction起始位置的指针
             unmanagedCodes[i] = (VMInstruction*)nativePointer.ToPointer();
             for (int j = 0; j < methods[i].Length; j++) {
                 unmanagedCodes[i][j] = methods[i][j];
@@ -75,5 +57,20 @@ public class TTT : MonoBehaviour
         });
     }
 
+    static void SafeCall() {
+        int LOOPS = 10000000;
+        var virtualMachine = CreateVirtualMachine();
 
+        var sw = Stopwatch.StartNew();
+        //for (int i = 0; i < LOOPS; i++) {
+            Call call = Call.Begin();
+            call.PushInt32(1);
+            call.PushInt32(2);
+            virtualMachine.Execute(0, ref call, 2);
+            //Call.End(ref call);
+            var addRes = call.GetInt32();
+            UnityEngine.Debug.LogError($"Add Res:{addRes}");
+        //}
+        Console.WriteLine("SafeCall " + "  : " + (LOOPS / (int)sw.Elapsed.TotalMilliseconds * 1000) + "\r\n");
+    }
 }
