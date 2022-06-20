@@ -9,9 +9,9 @@ public class TTT : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        A a = new A();
-        UnityEngine.Debug.LogError(a.Sum(1, 2));
-
+        //A a = new A();
+        //UnityEngine.Debug.LogError(a.Sum(1, 2));
+        SafeCall();
     }
 
     unsafe static public VirtualMachine CreateVirtualMachine() {
@@ -72,5 +72,6 @@ public class TTT : MonoBehaviour
             UnityEngine.Debug.LogError($"Add Res:{addRes}");
         //}
         Console.WriteLine("SafeCall " + "  : " + (LOOPS / (int)sw.Elapsed.TotalMilliseconds * 1000) + "\r\n");
+        virtualMachine = null;
     }
 }

@@ -84,7 +84,7 @@ unsafe public class VirtualMachine {
                         // 取出栈上的2个参数
                         Value* arg1Ptr = evaluationStackPointer - 1;
                         Value* arg2Ptr = evaluationStackPointer - 2;
-                        // 计算结果直接放在arg2位置上
+                        // 计算结果直接放在变量arg2位置上
                         evaluationStackPointer = arg2Ptr;
                         switch (arg1Ptr->Type) {
                             case ValueType.Integer: {
@@ -116,7 +116,8 @@ unsafe public class VirtualMachine {
                             for (int i = 0; i < evaluationStackPointer - evaluationStackBase - 1; i++) {
                                 managedStack[i + argumentPos + 1] = null;
                             }
-
+                            // 这个对于单纯add没什么用
+                            // *argumentBase = *(evaluationStackPointer - 1); 这个就将结果复制给栈顶了
                             return argumentBase + 1;
                         }
                         else {
@@ -125,9 +126,9 @@ unsafe public class VirtualMachine {
                             }
                             return argumentBase;
                         }
-                        break;
                     }
             }
+            pc++;
         }
     }
 }
