@@ -3,29 +3,35 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEngine;
+using LitJson;
+using UnityEditor;
 
 public class TTT : MonoBehaviour
 {
     // Start is called before the first frame update
     void Start()
     {
-        //A a = new A();
-        //UnityEngine.Debug.LogError(a.Sum(1, 2));
-        SafeCall();
+        A a = new A();
+        UnityEngine.Debug.LogError(a.Sum(1, 2));
     }
 
     unsafe static public VirtualMachine CreateVirtualMachine() {
-        VMInstruction[][] methods = new VMInstruction[][]
-        {
-                new VMInstruction[] //int add(int a, int b)
-                {
-                    new VMInstruction {Code = Code.StackSpace, Operand = 2 },
-                    new VMInstruction {Code = Code.Ldarg, Operand = 0 },
-                    new VMInstruction {Code = Code.Ldarg, Operand = 1 },
-                    new VMInstruction {Code = Code.Add },
-                    new VMInstruction {Code = Code.Ret , Operand = 1},
-                },
-        };
+        //VMInstruction[][] methods = new VMInstruction[][]
+        //{
+        //        new VMInstruction[] //int add(int a, int b)
+        //        {
+        //            new VMInstruction {Code = Code.StackSpace, Operand = 2 },
+        //            new VMInstruction {Code = Code.Ldarg, Operand = 0 },
+        //            new VMInstruction {Code = Code.Ldarg, Operand = 1 },
+        //            new VMInstruction {Code = Code.Add },
+        //            new VMInstruction {Code = Code.Ret , Operand = 1},
+        //        },
+        //};
+
+        var json = EditorPrefs.GetString("FixJson");
+        var vmils = JsonMapper.ToObject<List<VMInstruction>>(json);
+        VMInstruction[][] methods = new VMInstruction[1][];
+        methods[0] = vmils.ToArray();
 
         List<IntPtr> nativePointers = new List<IntPtr>();
 
@@ -57,21 +63,16 @@ public class TTT : MonoBehaviour
         });
     }
 
-    static void SafeCall() {
-        int LOOPS = 10000000;
+    public static void SafeCall() {
         var virtualMachine = CreateVirtualMachine();
-
         var sw = Stopwatch.StartNew();
-        //for (int i = 0; i < LOOPS; i++) {
-            Call call = Call.Begin();
-            call.PushInt32(1);
-            call.PushInt32(2);
-            virtualMachine.Execute(0, ref call, 2);
-            //Call.End(ref call);
-            var addRes = call.GetInt32();
-            UnityEngine.Debug.LogError($"Add Res:{addRes}");
-        //}
-        Console.WriteLine("SafeCall " + "  : " + (LOOPS / (int)sw.Elapsed.TotalMilliseconds * 1000) + "\r\n");
+        Call call = Call.Begin();
+        call.PushInt32(1);
+        call.PushInt32(2);
+        virtualMachine.Execute(0, ref call, 2);
+        //Call.End(ref call);
+        var addRes = call.GetInt32();
+        UnityEngine.Debug.LogError($"计算结果:{addRes}");
         virtualMachine = null;
     }
 }

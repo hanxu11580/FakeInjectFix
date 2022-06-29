@@ -1,4 +1,5 @@
-﻿using Mono.Cecil;
+﻿using LitJson;
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 using System;
 using System.Collections;
@@ -17,8 +18,8 @@ using UnityEngine;
 
 public static class InjectTools
 {
-    const string PatchKey = "Key_Sum";
-    const string GenPatchMethodName = "Gen_Sum";
+    const string GenPatchMethodPrefix = "GenMethod_";
+    const string FixJson = "FixJson";
 
     [MenuItem("Tools/RequestScriptReload")]
     public static void RequestScriptReload()
@@ -98,6 +99,43 @@ public static class InjectTools
         }
     }
 
+    [MenuItem("Tools/Fix")]
+    public static void Fix() {
+        if (EditorApplication.isCompiling || Application.isPlaying) {
+            UnityEngine.Debug.LogError("compiling or playing");
+            return;
+        }
+        var readerParameters = new ReaderParameters {
+            InMemory = true,
+            ReadWrite = true,
+        };
+        using (AssemblyDefinition assemblyDefinition =
+                AssemblyDefinition.ReadAssembly(AssemblyPath, readerParameters)) {
+            var mainModule = assemblyDefinition.MainModule;
+            var fixFullName = typeof(FixAttribute).FullName;
+            var patchFullName = typeof(PatchAttribute).FullName;
+
+            foreach (TypeDefinition typeDefinition in mainModule.Types) {
+                var needInject = typeDefinition.CustomAttributes.Any(attr =>
+                    attr.AttributeType.FullName.Equals(fixFullName, StringComparison.Ordinal));
+                if (!needInject) continue;
+
+                foreach (MethodDefinition method in typeDefinition.Methods) {
+                    if (method.CustomAttributes.Any(attr => attr.AttributeType.FullName.Equals(patchFullName, StringComparison.Ordinal))) {
+                        if (method.IsConstructor || method.IsGetter || method.IsSetter || !method.IsPublic)
+                            continue;
+                        // test
+                        if (method.Name == "Sum") {
+                            Fix(mainModule, method);
+                            break;
+                        }
+                    }
+
+                }
+            }
+            assemblyDefinition.Write(AssemblyPath, new WriterParameters { WriteSymbols = false });
+        }
+    }
 
 
     static void Test(ModuleDefinition module, MethodDefinition method)
@@ -297,7 +335,7 @@ public static class InjectTools
         var startNopIns = method.Body.Instructions[0];
         var brFalseJumpIns = startNopIns.Next; // 条件不满足时跳转的指令
 
-        var ins_ldstr = ilp.Create(OpCodes.Ldstr, PatchKey); // 插入patchKey
+        var ins_ldstr = ilp.Create(OpCodes.Ldstr, "0"); // 插入patchKey
         ilp.InsertBefore(startNopIns, ins_ldstr); //插到index = 0位置
 
         var incrIndex = 0;
@@ -343,7 +381,7 @@ public static class InjectTools
 
         var returnType = method.ReturnType;
         Mono.Cecil.MethodAttributes methodAttributes = Mono.Cecil.MethodAttributes.Public | Mono.Cecil.MethodAttributes.Static;
-        MethodDefinition patchMethod = new MethodDefinition(GenPatchMethodName, methodAttributes, returnType);
+        MethodDefinition patchMethod = new MethodDefinition(GenPatchMethodPrefix, methodAttributes, returnType);
 
         // 添加参数
         foreach (var parameter in method.Parameters) {
@@ -368,24 +406,74 @@ public static class InjectTools
 
     #endregion
 
-    #region Fix
-    //参数类型信息
-    class ParameterMatchInfo {
-        public bool IsOut;
-        public string ParameterType;
-    }
+    #region 修复
+    static void Fix(ModuleDefinition module, MethodDefinition method) {
+        //{
+        //  .custom instance void PatchAttribute::.ctor() = (01 00 00 00 ) 
+        //  // 代码大小       9 (0x9)
+        //  .maxstack  2
+        //  .locals init(int32 V_0)
+        //  IL_0000: nop
+        // IL_0001:  ldarg.1
+        //  IL_0002: ldarg.2
+        //  IL_0003: add
+        // IL_0004:  stloc.0
+        //  IL_0005: br.s IL_0007
+        //  IL_0007: ldloc.0
+        //  IL_0008: ret
+        //}
+        var ils = method.Body.Instructions;
+        var parseIls = new List<VMInstruction>();
+        for (int i = 0; i < ils.Count; i++) {
+            var il = ils[i];
+            var ilStr = ils[i].OpCode.Code.ToString();
+            switch (il.OpCode.Code) {
+                case Mono.Cecil.Cil.Code.Nop:
+                    parseIls.Add(new VMInstruction {
+                        Code = Code.StackSpace,
+                        Operand = (method.Body.Variables.Count << 16) | method.Body.MaxStackSize
+                    }); // local | maxstack
+                    break;
+                case Mono.Cecil.Cil.Code.Ldarg_0:
+                case Mono.Cecil.Cil.Code.Ldarg_1:
+                case Mono.Cecil.Cil.Code.Ldarg_2:
+                case Mono.Cecil.Cil.Code.Ldarg_3:
+                    parseIls.Add(new VMInstruction() {
+                        Code = Code.Ldarg,
+                        Operand = int.Parse(ilStr.Substring(ilStr.Length - 1)) - 1
+                    });
+                    break;
+                case Mono.Cecil.Cil.Code.Add:
+                    parseIls.Add(new VMInstruction {
+                        Code = (Code)Enum.Parse(typeof(Code), ilStr),
+                        Operand = 0
+                    });
+                    break;
+                case Mono.Cecil.Cil.Code.Stloc_0:
+                case Mono.Cecil.Cil.Code.Stloc_1:
+                case Mono.Cecil.Cil.Code.Stloc_2:
+                case Mono.Cecil.Cil.Code.Stloc_3:
+                    parseIls.Add(new VMInstruction {
+                        Code = Code.Stloc,
+                        Operand = int.Parse(ilStr.Substring(ilStr.Length - 1)),
+                    });
+                    break;
+                case Mono.Cecil.Cil.Code.Ret:
+                    parseIls.Add(new VMInstruction {
+                        Code = Code.Ret,
+                        Operand = method.ReturnType.ToString() == "System.Void" ? 0 : 1,
+                    });
+                    break;
+            }
+        }
 
-    //方法签名信息
-    class MethodMatchInfo {
-        public string Name;
-        public string ReturnType;
-        public ParameterMatchInfo[] Parameters;
-    }
+        foreach (var vmil in parseIls) {
+            Debug.LogError(vmil);
+        }
 
-
-    [MenuItem("Tools/IFix")]
-    public static void IFix() {
-
+        var json = JsonMapper.ToJson(parseIls);
+        Debug.LogError(json);
+        EditorPrefs.SetString(FixJson, json);
     }
 
     #endregion

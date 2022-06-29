@@ -188,13 +188,13 @@ public enum Code {
     //Pseudo instruction
     StackSpace,
 }
-
+[System.Serializable]
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public struct VMInstruction {
     /// <summary>
     /// 指令MAGIC
     /// </summary>
-    public const ulong INSTRUCTION_FORMAT_MAGIC = 317431043901;
+    //public const ulong INSTRUCTION_FORMAT_MAGIC = 317431043901;
 
     /// <summary>
     /// 当前指令
@@ -205,4 +205,8 @@ public struct VMInstruction {
     /// 操作数
     /// </summary>
     public int Operand;
+
+    public override string ToString() {
+        return $"Code:{Code} Operand:{Operand}";
+    }
 }
