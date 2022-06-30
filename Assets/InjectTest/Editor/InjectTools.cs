@@ -391,9 +391,19 @@ public static class InjectTools
         var ilp  = patchMethod.Body.GetILProcessor();
 
         ilp.Append(Instruction.Create(OpCodes.Nop));
-        ilp.Append(Instruction.Create(OpCodes.Ldstr, "我是生成的方法"));
-        var log_method = module.ImportReference(typeof(Debug).GetMethod("Log", new Type[] { typeof(object) }));
-        ilp.Append(Instruction.Create(OpCodes.Call, log_method));
+        var callBegin = module.Types.Single(t => t.Name == "Call").Methods.Single(m => m.Name == "Begin");
+        ilp.Append(Instruction.Create(OpCodes.Call, callBegin));
+        ilp.Append(Instruction.Create(OpCodes.Stloc_0));
+        ilp.Append(Instruction.Create(OpCodes.Ldloca_S, 0)); // 将局部变量0 放到堆栈中
+        ilp.Append(Instruction.Create(OpCodes.Ldarg_0));
+        var callPushInt32 = module.Types.Single(t => t.Name == "Call").Methods.Single(m => m.Name == "PushInt32");
+        ilp.Append(Instruction.Create(OpCodes.Call, callPushInt32));
+
+
+        // 测试方法
+        //ilp.Append(Instruction.Create(OpCodes.Ldstr, "我是生成的方法"));
+        //var log_method = module.ImportReference(typeof(Debug).GetMethod("Log", new Type[] { typeof(object) }));
+        //ilp.Append(Instruction.Create(OpCodes.Call, log_method));
 
         // 测试用  直接返回0
         //ilp.Append(Instruction.Create(OpCodes.Ldc_I4_0));
