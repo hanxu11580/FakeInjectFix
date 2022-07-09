@@ -373,8 +373,17 @@ public static class InjectTools
     /// </summary>
     /// <returns></returns>
     static MethodDefinition GenPatchMethod(ModuleDefinition module, MethodDefinition method) {
+        // PatchLoad
         var patchLoadType = module.Types.Single(t => t.Name == "PatchLoad");
-
+        var vmField = patchLoadType.Fields.Single(f => f.Name == "virtualMachine");
+        // Call
+        var callType = module.Types.Single(t => t.Name == "Call");
+        var callBegin = callType.Methods.Single(m => m.Name == "Begin");
+        var callPushInt32 = callType.Methods.Single(m => m.Name == "PushInt32");
+        var callGetInt32 = callType.Methods.Single(m => m.Name == "GetInt32");
+        // VirtualMachine
+        var vmExecute = module.Types.Single(t => t.Name == "VirtualMachine")
+            .Methods.Single(m => m.Name == "Execute" && m.Parameters.Count == 4);
         // 基础方法
         // 返回值
         // 参数
@@ -388,16 +397,42 @@ public static class InjectTools
             patchMethod.Parameters.Add(new ParameterDefinition(parameter.ParameterType));
         }
 
+        // var call
+        VariableDefinition callVar = new VariableDefinition(callType);
+        patchMethod.Body.Variables.Add(callVar);
+
         var ilp  = patchMethod.Body.GetILProcessor();
 
         ilp.Append(Instruction.Create(OpCodes.Nop));
-        var callBegin = module.Types.Single(t => t.Name == "Call").Methods.Single(m => m.Name == "Begin");
         ilp.Append(Instruction.Create(OpCodes.Call, callBegin));
         ilp.Append(Instruction.Create(OpCodes.Stloc_0));
-        ilp.Append(Instruction.Create(OpCodes.Ldloca_S, 0)); // 将局部变量0 放到堆栈中
+        // 将位于特定索引处的局部变量的地址加载到计算堆栈上
+        ilp.Append(Instruction.Create(OpCodes.Ldloca_S, callVar));
+        // 将索引为 0 的参数加载到计算堆栈上。
         ilp.Append(Instruction.Create(OpCodes.Ldarg_0));
-        var callPushInt32 = module.Types.Single(t => t.Name == "Call").Methods.Single(m => m.Name == "PushInt32");
         ilp.Append(Instruction.Create(OpCodes.Call, callPushInt32));
+        ilp.Append(Instruction.Create(OpCodes.Nop));
+        ilp.Append(Instruction.Create(OpCodes.Ldloca_S, callVar));
+        ilp.Append(Instruction.Create(OpCodes.Ldarg_1));
+        ilp.Append(Instruction.Create(OpCodes.Call, callPushInt32));
+        ilp.Append(Instruction.Create(OpCodes.Nop));
+        // 将静态字段的值推送到堆栈
+        ilp.Append(Instruction.Create(OpCodes.Ldsfld, vmField));
+        ilp.Append(Instruction.Create(OpCodes.Ldc_I4_0));
+        ilp.Append(Instruction.Create(OpCodes.Ldloca_S, callVar));
+        ilp.Append(Instruction.Create(OpCodes.Ldc_I4_2));
+        ilp.Append(Instruction.Create(OpCodes.Ldc_I4_0));
+        ilp.Append(Instruction.Create(OpCodes.Call, vmExecute));
+        ilp.Append(Instruction.Create(OpCodes.Nop));
+
+        ilp.Append(Instruction.Create(OpCodes.Ldloca_S, callVar));
+        ilp.Append(Instruction.Create(OpCodes.Ldc_I4_0));
+        ilp.Append(Instruction.Create(OpCodes.Call, callGetInt32));
+        // 将计算堆栈1 存储在局部变量列表中
+        //ilp.Append(Instruction.Create(OpCodes.Stloc_1));
+        // 将局部变量1 加载到计算堆栈中
+        //ilp.Append(Instruction.Create(OpCodes.Ldloc_1));
+        ilp.Append(Instruction.Create(OpCodes.Ret));
 
 
         // 测试方法
@@ -482,7 +517,7 @@ public static class InjectTools
         }
 
         var json = JsonMapper.ToJson(parseIls);
-        Debug.LogError(json);
+        // Debug.LogError(json);
         EditorPrefs.SetString(FixJson, json);
     }
 
