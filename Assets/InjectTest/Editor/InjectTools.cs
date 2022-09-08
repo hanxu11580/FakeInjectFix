@@ -4,6 +4,7 @@ using Mono.Cecil.Cil;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 
@@ -520,6 +521,56 @@ public static class InjectTools
         // Debug.LogError(json);
         EditorPrefs.SetString(FixJson, json);
     }
+
+    #endregion
+
+    #region 注意事项
+    // 在重新写入assembly时，如果有第三方依赖dll，需要添查询路径
+    // 不然会报错
+    static void AssemblyResolverAddSerarchDir(AssemblyDefinition assembly) {
+        var resolver = assembly.MainModule.AssemblyResolver as BaseAssemblyResolver;
+
+        foreach (var path in
+            (from asm in AppDomain.CurrentDomain.GetAssemblies()
+             select Path.GetDirectoryName(asm.ManifestModule.FullyQualifiedName)).Distinct()) {
+            try {
+                resolver.AddSearchDirectory(path);
+            }
+            catch { }
+        }
+    }
+
+    // 打包是无法主动注释 必须等Unity编译好你才能注入
+    public static bool IsInjectFullLog = false;
+
+    public static bool AutoInject = true;
+    // 确保只注入一次
+    public static bool InjectOnce = false;
+
+    static bool injected = false;
+
+    [UnityEditor.Callbacks.PostProcessScene]
+    public static void AutoInjectAssemblys() {
+        if (!IsInjectFullLog) {
+            return;
+        }
+        if (AutoInject && !injected) {
+            // 具体的注入逻辑
+            if (InjectOnce) {
+                injected = true;
+            }
+        }
+    }
+
+    static string GetScriptAssembliesPath() {
+        var assembliesFolder = "PlayerScriptAssemblies";
+        if (!Directory.Exists(string.Format("./Library/{0}/", assembliesFolder))) {
+            assembliesFolder = "ScriptAssemblies";
+        }
+
+        return string.Format("./Library/{0}/{1}.dll", assembliesFolder, "Assembly-CSharp");
+    }
+
 
     #endregion
 }
